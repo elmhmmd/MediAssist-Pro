@@ -40,7 +40,7 @@ SECTION_PATTERN = re.compile(
 
 NOISE_PATTERNS = [
     re.compile(r"MANUEL D[’'.]ENTRETIEN ET DE MAINTENANCE DES APPAREILS DE LABORATOIRE", re.IGNORECASE),
-    re.compile(r"CHAPITRE \d+\s+\S.*", re.IGNORECASE),
+    re.compile(r"^CHAPITRE \d+ [A-Z].*$", re.MULTILINE | re.IGNORECASE),
     re.compile(r"^Photo avec l[’']aimable autorisation[^\n]*$", re.MULTILINE | re.IGNORECASE),
     re.compile(r"^\d{1,3}\s*$", re.MULTILINE),
     re.compile(r"^[•●]\s*[•●]\s*[•●][^\n]*$", re.MULTILINE),
@@ -63,56 +63,207 @@ def format_table(table: List[List]) -> str:
     for row in table:
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
-        # Clean up intra-cell newlines so markdown logic doesn't break
         cleaned_row = [str(c).replace("\n", " ").strip() if c else "" for c in row]
         rows.append(" | ".join(cleaned_row))
     return "\n".join(rows)
 
 
+def find_column_split(page) -> Optional[float]:
+    chars = page.chars
+    if not chars:
+        return None
+    
+    page_width = page.width
+    bucket_size = 20
+    buckets = {}
+    for c in chars:
+        x = (c["x0"] + c["x1"]) / 2
+        b = int(x // bucket_size) * bucket_size
+        buckets[b] = buckets.get(b, 0) + 1
+    
+    search_left = page_width * 0.25
+    search_right = page_width * 0.75
+    middle_buckets = {b: v for b, v in buckets.items() if search_left <= b <= search_right}
+    if not middle_buckets:
+        return None
+    
+    min_bucket = min(middle_buckets, key=middle_buckets.get)
+    mean_count = sum(buckets.values()) / len(buckets)
+    if middle_buckets[min_bucket] >= mean_count * 0.50:
+        return None
+    
+    split_x = min_bucket + bucket_size / 2
+    left_count = sum(1 for c in chars if (c["x0"] + c["x1"]) / 2 < split_x)
+    right_count = len(chars) - left_count
+    if left_count < len(chars) * 0.15 or right_count < len(chars) * 0.15:
+        return None
+    
+    for t in page.find_tables():
+        if t.bbox[0] < split_x < t.bbox[2]:
+            return None
+    
+    return split_x
+
+
+def extract_column_text(page, x0, x1) -> str:
+    cropped = page.crop((x0, 0, x1, page.height))
+    
+    tables = cropped.find_tables()
+    table_bboxes = [t.bbox for t in tables]
+    table_data = [(t.bbox[1], format_table(t.extract())) for t in tables if t.extract()]
+    
+    def not_in_table(obj):
+        if obj.get("object_type") == "char":
+            ox0, otop, ox1, obottom = obj["x0"], obj["top"], obj["x1"], obj["bottom"]
+            for bbox in table_bboxes:
+                if ox0 >= bbox[0] - 3 and ox1 <= bbox[2] + 3 and otop >= bbox[1] - 3 and obottom <= bbox[3] + 3:
+                    return False
+        return True
+    
+    non_table = cropped.filter(not_in_table)
+    
+    lines_by_y = {}
+    for char in non_table.chars:
+        y_key = round(char["top"] / 5) * 5
+        if y_key not in lines_by_y:
+            lines_by_y[y_key] = []
+        lines_by_y[y_key].append(char)
+    
+    text_blocks = []
+    for y in sorted(lines_by_y.keys()):
+        chars = sorted(lines_by_y[y], key=lambda c: c["x0"])
+        line = "".join(c["text"] for c in chars)
+        text_blocks.append((y, line.strip()))
+    
+    for y, table_text in table_data:
+        text_blocks.append((y, "\n" + table_text))
+    
+    text_blocks.sort(key=lambda x: x[0])
+    
+    lines = []
+    prev_y = None
+    for y, text in text_blocks:
+        if prev_y is not None and y - prev_y > 20:
+            lines.append("")
+        lines.append(text)
+        prev_y = y
+    
+    return "\n".join(lines)
+
+
+def extract_column_lines(page, x0, x1) -> List[Tuple[float, str]]:
+    cropped = page.crop((x0, 0, x1, page.height))
+    
+    tables = cropped.find_tables()
+    table_bboxes = [t.bbox for t in tables]
+    table_data = [(t.bbox[1], format_table(t.extract())) for t in tables if t.extract()]
+    
+    def not_in_table(obj):
+        if obj.get("object_type") == "char":
+            ox0, otop, ox1, obottom = obj["x0"], obj["top"], obj["x1"], obj["bottom"]
+            for bbox in table_bboxes:
+                if ox0 >= bbox[0] - 3 and ox1 <= bbox[2] + 3 and otop >= bbox[1] - 3 and obottom <= bbox[3] + 3:
+                    return False
+        return True
+    
+    non_table = cropped.filter(not_in_table)
+    
+    lines_by_y = {}
+    for char in non_table.chars:
+        y_key = round(char["top"] / 5) * 5
+        if y_key not in lines_by_y:
+            lines_by_y[y_key] = []
+        lines_by_y[y_key].append(char)
+    
+    blocks = []
+    for y in sorted(lines_by_y.keys()):
+        chars = sorted(lines_by_y[y], key=lambda c: c["x0"])
+        line = "".join(c["text"] for c in chars)
+        if line.strip():
+            blocks.append((y, line.strip()))
+    
+    for y, table_text in table_data:
+        blocks.append((y, table_text))
+    
+    blocks.sort(key=lambda x: x[0])
+    return blocks
+
+
 def extract_page_text(page) -> str:
-    # 1. Filter out vertical text and headers/footers based on coordinates
     def filter_objs(obj):
         if obj.get("object_type") == "char":
-            # Ignore sideways/rotated text (e.g. photo credits)
             if not obj.get("upright", True):
                 return False
-            # Ignore running headers (top 70pts) and footers (bottom 60pts)
             if obj["top"] < 70 or obj["bottom"] > page.height - 60:
                 return False
         return True
-
+    
     p = page.filter(filter_objs)
-
-    # 2. Extract tables safely
-    tables = p.find_tables()
-    table_bboxes = [t.bbox for t in tables]
-    table_texts = [format_table(t.extract()) for t in tables if t.extract()]
-
-    # 3. Exclude characters that belong to tables from the main text flow 
-    def not_in_table(obj):
+    
+    split_x = find_column_split(p)
+    
+    if not split_x:
+        lines = extract_column_lines(p, 0, page.width)
+        return "\n".join(text for _, text in lines)
+    
+    chars = p.chars
+    lines_by_y = {}
+    for c in chars:
+        y_key = round(c["top"] / 5) * 5
+        if y_key not in lines_by_y:
+            lines_by_y[y_key] = []
+        lines_by_y[y_key].append(c)
+    
+    true_full_width = []
+    column_y_ranges = []
+    
+    for y in list(lines_by_y.keys()):
+        line_chars = lines_by_y[y]
+        min_x = min(c["x0"] for c in line_chars)
+        max_x = max(c["x1"] for c in line_chars)
+        
+        if min_x < split_x - 30 and max_x > split_x + 30:
+            left_chars = [c for c in line_chars if (c["x0"] + c["x1"]) / 2 < split_x]
+            right_chars = [c for c in line_chars if (c["x0"] + c["x1"]) / 2 >= split_x]
+            
+            left_max_x = max(c["x1"] for c in left_chars) if left_chars else 0
+            right_min_x = min(c["x0"] for c in right_chars) if right_chars else 0
+            gap = right_min_x - left_max_x
+            
+            if gap < 15:
+                text = "".join(c["text"] for c in sorted(line_chars, key=lambda c: c["x0"]))
+                if text.strip():
+                    true_full_width.append((y, text.strip()))
+                    column_y_ranges.append((y - 8, y + 18))
+    
+    def not_full_width(obj):
         if obj.get("object_type") == "char":
-            x0, top, x1, bottom = obj["x0"], obj["top"], obj["x1"], obj["bottom"]
-            for bbox in table_bboxes:
-                # Add a 3pt margin to effectively capture table borders 
-                if x0 >= bbox[0]-3 and x1 <= bbox[2]+3 and top >= bbox[1]-3 and bottom <= bbox[3]+3:
+            y = obj["top"]
+            for y0, y1 in column_y_ranges:
+                if y0 <= y <= y1:
                     return False
         return True
-
-    non_table_page = p.filter(not_in_table)
-
-    # 4. Extract remaining text using pdfminer layout parameters to respect column boundaries
-    non_table_text = non_table_page.extract_text(laparams={
-        "line_overlap": 0.5,
-        "char_margin": 2.0,
-        "line_margin": 0.5,
-        "word_margin": 0.1,
-        "boxes_flow": 0.5,
-        "detect_vertical": False,
-        "all_texts": True
-    }) or ""
-
-    # Append table text below the natural text block
-    return "\n\n".join(filter(None, [non_table_text] + table_texts))
+    
+    remaining = p.filter(not_full_width)
+    
+    left_lines = extract_column_lines(remaining, 0, split_x)
+    right_lines = extract_column_lines(remaining, split_x, page.width)
+    
+    left_text = "\n".join(text for _, text in left_lines)
+    right_text = "\n".join(text for _, text in right_lines)
+    
+    all_blocks = []
+    for y, text in left_lines:
+        all_blocks.append((y, text, "left"))
+    for y, text in true_full_width:
+        all_blocks.append((y, text, "full"))
+    
+    all_blocks.sort(key=lambda x: x[0])
+    
+    left_and_full = "\n".join(text for _, text, _ in all_blocks)
+    
+    parts = [p for p in [left_and_full, right_text] if p.strip()]
+    return "\n\n".join(parts)
 
 
 def dedupe_line(line: str) -> str:
