@@ -1,0 +1,9 @@
+# PDF Processing & Chunking
+pypdf
+pdfplumber
+langchain
+langchain-community
+langchain-text-splitters
+
+# For later steps
+python-dotenv
