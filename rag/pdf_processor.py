@@ -4,7 +4,6 @@ import pdfplumber
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
-
 CHAPTER_PATTERN = re.compile(r"Chapitre\s+(\d+)\s*\n", re.IGNORECASE)
 
 SECTION_PATTERN = re.compile(
@@ -31,15 +30,18 @@ SECTION_PATTERN = re.compile(
     r"Utilisation du bain|Entretien$|Nettoyage$|Lubrification|"
     r"Inspection p[eé]riodique|[EÉ]l[eé]ments de la centrifugeuse|"
     r"Tubes$|Rotors$|Outils et instruments|Remplacement du filtre|"
-    r"St[eé]rilisation du r[eé]cipient"
+    r"St[eé]rilisation du r[eé]cipient|"
+    r"Mat[eé]riel n[eé]cessaire pour les tests ELISA|"
+    r"Etapes m[eé]caniques de la technique ELISA|"
+    r"Etapes biochimiques de la technique ELISA"
     r")",
-    re.MULTILINE,
+    re.MULTILINE | re.IGNORECASE,
 )
 
 NOISE_PATTERNS = [
-    re.compile(r"MANUEL D.ENTRETIEN ET DE MAINTENANCE DES APPAREILS DE LABORATOIRE"),
-    re.compile(r"CHAPITRE \d+\s+\S[^\n]*"),
-    re.compile(r"^Photo avec l.aimable autorisation[^\n]*$", re.MULTILINE),
+    re.compile(r"MANUEL D[’'.]ENTRETIEN ET DE MAINTENANCE DES APPAREILS DE LABORATOIRE", re.IGNORECASE),
+    re.compile(r"CHAPITRE \d+\s+\S.*", re.IGNORECASE),
+    re.compile(r"^Photo avec l[’']aimable autorisation[^\n]*$", re.MULTILINE | re.IGNORECASE),
     re.compile(r"^\d{1,3}\s*$", re.MULTILINE),
     re.compile(r"^[•●]\s*[•●]\s*[•●][^\n]*$", re.MULTILINE),
 ]
@@ -61,76 +63,56 @@ def format_table(table: List[List]) -> str:
     for row in table:
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
-        rows.append(" | ".join(str(c).strip() if c else "" for c in row))
+        # Clean up intra-cell newlines so markdown logic doesn't break
+        cleaned_row = [str(c).replace("\n", " ").strip() if c else "" for c in row]
+        rows.append(" | ".join(cleaned_row))
     return "\n".join(rows)
 
 
-def extract_col(col) -> str:
-    tables = col.find_tables()
+def extract_page_text(page) -> str:
+    # 1. Filter out vertical text and headers/footers based on coordinates
+    def filter_objs(obj):
+        if obj.get("object_type") == "char":
+            # Ignore sideways/rotated text (e.g. photo credits)
+            if not obj.get("upright", True):
+                return False
+            # Ignore running headers (top 70pts) and footers (bottom 60pts)
+            if obj["top"] < 70 or obj["bottom"] > page.height - 60:
+                return False
+        return True
+
+    p = page.filter(filter_objs)
+
+    # 2. Extract tables safely
+    tables = p.find_tables()
     table_bboxes = [t.bbox for t in tables]
     table_texts = [format_table(t.extract()) for t in tables if t.extract()]
 
-    if table_bboxes:
-        non_table_text = col.filter(
-            lambda obj: obj["object_type"] == "char"
-            and not any(
-                obj["x0"] >= bbox[0] - 2
-                and obj["x1"] <= bbox[2] + 2
-                and obj["top"] >= bbox[1] - 2
-                and obj["bottom"] <= bbox[3] + 2
-                for bbox in table_bboxes
-            )
-        ).extract_text() or ""
-    else:
-        non_table_text = col.extract_text() or ""
+    # 3. Exclude characters that belong to tables from the main text flow 
+    def not_in_table(obj):
+        if obj.get("object_type") == "char":
+            x0, top, x1, bottom = obj["x0"], obj["top"], obj["x1"], obj["bottom"]
+            for bbox in table_bboxes:
+                # Add a 3pt margin to effectively capture table borders 
+                if x0 >= bbox[0]-3 and x1 <= bbox[2]+3 and top >= bbox[1]-3 and bottom <= bbox[3]+3:
+                    return False
+        return True
 
-    return "\n".join(p for p in [non_table_text] + table_texts if p.strip())
+    non_table_page = p.filter(not_in_table)
 
+    # 4. Extract remaining text using pdfminer layout parameters to respect column boundaries
+    non_table_text = non_table_page.extract_text(laparams={
+        "line_overlap": 0.5,
+        "char_margin": 2.0,
+        "line_margin": 0.5,
+        "word_margin": 0.1,
+        "boxes_flow": 0.5,
+        "detect_vertical": False,
+        "all_texts": True
+    }) or ""
 
-def find_column_split(page) -> Optional[float]:
-    chars = page.chars
-    if not chars:
-        return None
-
-    page_width = page.width
-    bucket_size = 20
-    buckets: dict = {}
-    for c in chars:
-        x = (c["x0"] + c["x1"]) / 2
-        b = int(x // bucket_size) * bucket_size
-        buckets[b] = buckets.get(b, 0) + 1
-
-    search_left = page_width * 0.25
-    search_right = page_width * 0.75
-    middle_buckets = {b: v for b, v in buckets.items() if search_left <= b <= search_right}
-    if not middle_buckets:
-        return None
-
-    min_bucket = min(middle_buckets, key=middle_buckets.get)
-    mean_count = sum(buckets.values()) / len(buckets)
-    if middle_buckets[min_bucket] >= mean_count * 0.50:
-        return None
-
-    split_x = min_bucket + bucket_size / 2
-    left_count = sum(1 for c in chars if (c["x0"] + c["x1"]) / 2 < split_x)
-    right_count = len(chars) - left_count
-    if left_count < len(chars) * 0.15 or right_count < len(chars) * 0.15:
-        return None
-
-    for t in page.find_tables():
-        if t.bbox[0] < split_x < t.bbox[2]:
-            return None
-
-    return split_x
-
-
-def extract_page_text(page) -> str:
-    split_x = find_column_split(page)
-    if split_x:
-        left_text = extract_col(page.crop((0, 0, split_x, page.height)))
-        right_text = extract_col(page.crop((split_x, 0, page.width, page.height)))
-        return "\n".join(p for p in [left_text, right_text] if p.strip())
-    return extract_col(page)
+    # Append table text below the natural text block
+    return "\n\n".join(filter(None, [non_table_text] + table_texts))
 
 
 def dedupe_line(line: str) -> str:
