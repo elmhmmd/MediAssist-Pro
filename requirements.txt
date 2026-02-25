@@ -1,9 +1,26 @@
-# PDF Processing & Chunking
-pypdf
-pdfplumber
-langchain
-langchain-community
-langchain-text-splitters
+# Document processing and retrieval
+pdfplumber==0.11.9
+langchain-core==1.2.15
+langchain-text-splitters==1.1.1
+langchain-chroma==1.1.0
+langchain-ollama==1.0.1
+chromadb==1.5.1
 
-# For later steps
-python-dotenv
+# API
+fastapi==0.133.0
+uvicorn==0.41.0
+pydantic[email]==2.12.5
+pydantic-settings==2.13.1
+
+# Auth
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.22
+
+# Database
+sqlalchemy==2.0.47
+psycopg2-binary==2.9.11
+alembic==1.18.4
+
+# Config
+python-dotenv==1.2.1
