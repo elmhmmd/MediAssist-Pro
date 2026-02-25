@@ -1,3 +1,4 @@
+import mlflow
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -5,6 +6,12 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_ollama import OllamaLLM
 
 from rag.indexer import CHROMA_DIR
+from rag.mlflow_logger import (
+    log_llm_config,
+    log_query_response,
+    log_rag_config,
+    setup_mlflow,
+)
 from rag.retriever import OLLAMA_BASE_URL, OLLAMA_MODEL, retrieve
 
 SYSTEM_PROMPT = (
@@ -69,9 +76,23 @@ def ask(
     persist_directory: str = CHROMA_DIR,
     model: str = OLLAMA_MODEL,
     base_url: str = OLLAMA_BASE_URL,
+    log: bool = True,
 ) -> str:
+    setup_mlflow()
     chain = build_rag_chain(persist_directory, model, base_url)
-    return chain.invoke({"question": question})
+
+    with mlflow.start_run():
+        log_rag_config()
+        log_llm_config(model=model, prompt_template=SYSTEM_PROMPT)
+
+        docs = retrieve(question, persist_directory=persist_directory, model=model, base_url=base_url)
+        context = _format_context(docs)
+        answer = chain.invoke({"question": question})
+
+        if log:
+            log_query_response(question=question, answer=answer, context=context)
+
+    return answer
 
 
 if __name__ == "__main__":

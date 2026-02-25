@@ -1,0 +1,14 @@
+artifact_uri: /home/simo/Desktop/Projects/MediAssist Pro/mlruns/258860584896530714/3f49f85538da49299d1e71c544605c5c/artifacts
+end_time: 1772062876209
+entry_point_name: ''
+experiment_id: '258860584896530714'
+lifecycle_stage: active
+run_id: 3f49f85538da49299d1e71c544605c5c
+run_name: gifted-pug-14
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772062876203
+status: 3
+tags: []
+user_id: simo
