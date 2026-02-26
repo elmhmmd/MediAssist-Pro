@@ -1,0 +1,14 @@
+artifact_uri: /home/simo/Desktop/Projects/MediAssist Pro/mlruns/258860584896530714/5826288323f74e12aaa49d23a28c8efa/artifacts
+end_time: 1772063335377
+entry_point_name: ''
+experiment_id: '258860584896530714'
+lifecycle_stage: active
+run_id: 5826288323f74e12aaa49d23a28c8efa
+run_name: stylish-mole-528
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772063245529
+status: 4
+tags: []
+user_id: simo

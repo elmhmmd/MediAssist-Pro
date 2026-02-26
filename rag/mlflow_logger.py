@@ -1,7 +1,4 @@
 import mlflow
-from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
-from deepeval.models.base_model import DeepEvalBaseLLM
-from deepeval.test_case import LLMTestCase
 from langchain_ollama import OllamaLLM
 
 from rag.retriever import FINAL_K, OLLAMA_BASE_URL, OLLAMA_MODEL
@@ -9,7 +6,9 @@ from rag.retriever import FINAL_K, OLLAMA_BASE_URL, OLLAMA_MODEL
 MLFLOW_EXPERIMENT = "mediassist-rag"
 
 
-class OllamaEvalLLM(DeepEvalBaseLLM):
+class OllamaEvalLLM:
+    from deepeval.models.base_model import DeepEvalBaseLLM
+    __bases__ = (DeepEvalBaseLLM,)
     """Wraps Ollama so DeepEval can use it for metric evaluation."""
 
     def __init__(self, model: str = OLLAMA_MODEL, base_url: str = OLLAMA_BASE_URL):

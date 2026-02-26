@@ -78,7 +78,6 @@ def ask(
     base_url: str = OLLAMA_BASE_URL,
     log: bool = True,
 ) -> str:
-    setup_mlflow()
     chain = build_rag_chain(persist_directory, model, base_url)
 
     with mlflow.start_run():

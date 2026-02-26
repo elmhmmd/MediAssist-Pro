@@ -4,11 +4,13 @@ from fastapi import FastAPI
 
 import app.db.base as db_base
 from app.api.routes import auth, query
+from rag.mlflow_logger import setup_mlflow
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db_base.Base.metadata.create_all(bind=db_base.engine)
+    setup_mlflow()
     yield
 
 

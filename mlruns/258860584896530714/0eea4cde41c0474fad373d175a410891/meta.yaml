@@ -1,0 +1,14 @@
+artifact_uri: /home/simo/Desktop/Projects/MediAssist Pro/mlruns/258860584896530714/0eea4cde41c0474fad373d175a410891/artifacts
+end_time: 1772063335379
+entry_point_name: ''
+experiment_id: '258860584896530714'
+lifecycle_stage: active
+run_id: 0eea4cde41c0474fad373d175a410891
+run_name: useful-chimp-989
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772063245518
+status: 4
+tags: []
+user_id: simo
