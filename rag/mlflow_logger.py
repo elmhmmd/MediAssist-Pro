@@ -6,27 +6,6 @@ from rag.retriever import FINAL_K, OLLAMA_BASE_URL, OLLAMA_MODEL
 MLFLOW_EXPERIMENT = "mediassist-rag"
 
 
-class OllamaEvalLLM:
-    from deepeval.models.base_model import DeepEvalBaseLLM
-    __bases__ = (DeepEvalBaseLLM,)
-    """Wraps Ollama so DeepEval can use it for metric evaluation."""
-
-    def __init__(self, model: str = OLLAMA_MODEL, base_url: str = OLLAMA_BASE_URL):
-        self._llm = OllamaLLM(model=model, base_url=base_url)
-
-    def load_model(self):
-        return self._llm
-
-    def generate(self, prompt: str) -> str:
-        return self._llm.invoke(prompt)
-
-    async def a_generate(self, prompt: str) -> str:
-        return self.generate(prompt)
-
-    def get_model_name(self) -> str:
-        return f"ollama/{OLLAMA_MODEL}"
-
-
 def setup_mlflow(tracking_uri: str = "mlruns"):
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
@@ -81,6 +60,26 @@ def log_query_response(
     run_id: str | None = None,
     evaluate: bool = True,
 ):
+    from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
+    from deepeval.models.base_model import DeepEvalBaseLLM
+    from deepeval.test_case import LLMTestCase
+
+    class OllamaEvalLLM(DeepEvalBaseLLM):
+        def __init__(self):
+            self._llm = OllamaLLM(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
+
+        def load_model(self):
+            return self._llm
+
+        def generate(self, prompt: str) -> str:
+            return self._llm.invoke(prompt)
+
+        async def a_generate(self, prompt: str) -> str:
+            return self.generate(prompt)
+
+        def get_model_name(self) -> str:
+            return f"ollama/{OLLAMA_MODEL}"
+
     with mlflow.start_run(run_id=run_id, nested=True):
         mlflow.log_param("question", question[:500])
         mlflow.log_text(answer, "response.txt")

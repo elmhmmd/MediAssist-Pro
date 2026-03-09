@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 import app.db.base as db_base
-from app.api.routes import auth, query
+from app.api.routes import admin, auth, query
 from rag.mlflow_logger import setup_mlflow
 
 
@@ -18,6 +18,7 @@ app = FastAPI(title="MediAssist Pro", version="1.0.0", lifespan=lifespan)
 
 app.include_router(auth.router)
 app.include_router(query.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")
