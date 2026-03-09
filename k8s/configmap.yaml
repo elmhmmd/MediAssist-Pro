@@ -4,7 +4,7 @@ metadata:
   name: mediassist-config
   namespace: mediassist
 data:
-  OLLAMA_BASE_URL: "http://192.168.49.1:11434"   # use: minikube ssh -- ip route | awk '/default/{print $3}'
+  OLLAMA_BASE_URL: "http://192.168.49.1:11434"
   CHROMA_DIR: "/app/chroma_store"
   OLLAMA_MODEL: "mistral"
   DATABASE_URL: "postgresql://mediassist:mediassist@postgres-service:5432/mediassist"
