@@ -24,3 +24,10 @@ alembic==1.18.4
 
 # Config
 python-dotenv==1.2.1
+
+# LLMOps
+mlflow==2.22.0
+deepeval==2.7.5
+
+# Monitoring
+prometheus-fastapi-instrumentator==7.1.0

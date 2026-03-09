@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediassist-app
+  namespace: mediassist
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediassist-app
+  template:
+    metadata:
+      labels:
+        app: mediassist-app
+    spec:
+      containers:
+        - name: mediassist-app
+          image: DOCKERHUB_USERNAME/mediassist-pro:latest   # replaced by CI/CD with SHA tag
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mediassist-secret
+                  key: SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: DATABASE_URL
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: OLLAMA_BASE_URL
+            - name: CHROMA_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: CHROMA_DIR
+            - name: OLLAMA_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: OLLAMA_MODEL
+            - name: ALGORITHM
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: ALGORITHM
+            - name: ACCESS_TOKEN_EXPIRE_MINUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: ACCESS_TOKEN_EXPIRE_MINUTES
+          volumeMounts:
+            - name: chroma-storage
+              mountPath: /app/chroma_store
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: chroma-storage
+          persistentVolumeClaim:
+            claimName: chroma-pvc
