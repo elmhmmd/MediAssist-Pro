@@ -18,6 +18,7 @@ services:
 
   app:
     build: .
+    image: mediassist-pro:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -29,6 +30,7 @@ services:
       CHROMA_DIR: /app/chroma_store
       OLLAMA_MODEL: mistral
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
       - ./chroma_store:/app/chroma_store
       - ./data.txt:/app/data.txt:ro
@@ -38,5 +40,55 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  ui:
+    image: mediassist-pro:latest
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://app:8000
+    command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - app
+
+  mlflow:
+    image: python:3.12-slim
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    command: >
+      bash -c "pip install mlflow==2.22.0 -q &&
+               mlflow server --host=0.0.0.0 --port=5000
+               --backend-store-uri=/mlflow/mlruns
+               --default-artifact-root=/mlflow/artifacts"
+    volumes:
+      - mlflow_data:/mlflow
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:

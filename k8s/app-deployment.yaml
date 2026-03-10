@@ -13,9 +13,32 @@ spec:
       labels:
         app: mediassist-app
     spec:
+      initContainers:
+        - name: chroma-init
+          image: mediassist-pro:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -z "$(ls -A ${CHROMA_DIR} 2>/dev/null)" ]; then
+                echo "ChromaDB store is empty, running indexer..."
+                python rag/indexer.py data.txt --source data.pdf --persist-dir ${CHROMA_DIR}
+              else
+                echo "ChromaDB store already populated, skipping indexing."
+              fi
+          env:
+            - name: CHROMA_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: CHROMA_DIR
+          volumeMounts:
+            - name: chroma-storage
+              mountPath: /app/chroma_store
       containers:
         - name: mediassist-app
-          image: DOCKERHUB_USERNAME/mediassist-pro:latest   # replaced by CI/CD with SHA tag
+          image: mediassist-pro:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           env:
@@ -54,6 +77,11 @@ spec:
                 configMapKeyRef:
                   name: mediassist-config
                   key: ACCESS_TOKEN_EXPIRE_MINUTES
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: mediassist-config
+                  key: MLFLOW_TRACKING_URI
           volumeMounts:
             - name: chroma-storage
               mountPath: /app/chroma_store

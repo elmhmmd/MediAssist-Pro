@@ -1,13 +1,16 @@
 import mlflow
+import os
 from langchain_ollama import OllamaLLM
 
-from rag.retriever import FINAL_K, OLLAMA_BASE_URL, OLLAMA_MODEL
+from app.core.config import settings
+from rag.retriever import FINAL_K, OLLAMA_MODEL
 
 MLFLOW_EXPERIMENT = "mediassist-rag"
 
 
-def setup_mlflow(tracking_uri: str = "mlruns"):
-    mlflow.set_tracking_uri(tracking_uri)
+def setup_mlflow(tracking_uri: str | None = None):
+    uri = tracking_uri or os.environ.get("MLFLOW_TRACKING_URI", "mlruns")
+    mlflow.set_tracking_uri(uri)
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 
@@ -60,13 +63,13 @@ def log_query_response(
     run_id: str | None = None,
     evaluate: bool = True,
 ):
-    from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
+    from deepeval.metrics import AnswerRelevancyMetric, ContextualPrecisionMetric, ContextualRecallMetric, FaithfulnessMetric
     from deepeval.models.base_model import DeepEvalBaseLLM
     from deepeval.test_case import LLMTestCase
 
     class OllamaEvalLLM(DeepEvalBaseLLM):
         def __init__(self):
-            self._llm = OllamaLLM(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
+            self._llm = OllamaLLM(model=OLLAMA_MODEL, base_url=settings.OLLAMA_BASE_URL)
 
         def load_model(self):
             return self._llm

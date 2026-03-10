@@ -32,10 +32,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install dependencies
-        run: pip install --prefer-binary -r requirements.txt
+        run: uv pip install --system -r requirements.lock
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
@@ -97,7 +101,11 @@ jobs:
       - name: Apply Kubernetes manifests
         run: |
           kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/secret.yaml
+          kubectl create secret generic mediassist-secret \
+            --from-literal=SECRET_KEY=${{ secrets.SECRET_KEY }} \
+            --from-literal=POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
+            --namespace=mediassist \
+            --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/postgres-pvc.yaml
           kubectl apply -f k8s/postgres-deployment.yaml
@@ -110,6 +118,9 @@ jobs:
           kubectl apply -f k8s/prometheus-service.yaml
           kubectl apply -f k8s/grafana-deployment.yaml
           kubectl apply -f k8s/grafana-service.yaml
+          kubectl apply -f k8s/mlflow-pvc.yaml
+          kubectl apply -f k8s/mlflow-deployment.yaml
+          kubectl apply -f k8s/mlflow-service.yaml
 
       - name: Update app image to new SHA
         run: |

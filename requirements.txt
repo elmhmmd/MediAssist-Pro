@@ -27,7 +27,12 @@ python-dotenv==1.2.1
 
 # LLMOps
 mlflow==2.22.0
-deepeval==2.7.5
+deepeval>=2.7.5
 
 # Monitoring
 prometheus-fastapi-instrumentator==7.1.0
+
+# UI
+streamlit==1.45.1
+requests==2.32.3
+# dns-fix

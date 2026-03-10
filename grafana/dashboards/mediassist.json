@@ -1,0 +1,41 @@
+{
+  "title": "MediAssist Pro — RAG Monitoring",
+  "uid": "mediassist-rag",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "expr": "sum(rate(http_requests_total{job=\"mediassist-app\"}[1m]))",
+        "legendFormat": "req/s"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Latency p50 / p95 / p99",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+      "targets": [
+        {"refId": "A", "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_highr_seconds_bucket{job=\"mediassist-app\"}[5m])) by (le))", "legendFormat": "p50"},
+        {"refId": "B", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket{job=\"mediassist-app\"}[5m])) by (le))", "legendFormat": "p95"},
+        {"refId": "C", "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_highr_seconds_bucket{job=\"mediassist-app\"}[5m])) by (le))", "legendFormat": "p99"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error Rate",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 6},
+      "targets": [{
+        "refId": "A",
+        "expr": "sum(rate(http_requests_total{job=\"mediassist-app\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"mediassist-app\"}[5m]))",
+        "legendFormat": "error rate"
+      }]
+    }
+  ]
+}

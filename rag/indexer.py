@@ -4,7 +4,10 @@ import chromadb.utils.embedding_functions as chroma_ef
 from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
   
-from pdf_chunker import chunk_text_file
+try:
+    from rag.pdf_chunker import chunk_text_file
+except ImportError:
+    from pdf_chunker import chunk_text_file
 
 CHROMA_DIR = "chroma_store"
 
