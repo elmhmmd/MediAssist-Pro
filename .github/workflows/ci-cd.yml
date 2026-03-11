@@ -84,8 +84,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ────────────────────────────────────────────────────────────────────────────
-  deploy:
-    name: Deploy to Minikube
+  validate-k8s:
+    name: Validate Kubernetes manifests
     runs-on: ubuntu-latest
     needs: build-push
     if: github.event_name == 'push'
@@ -98,7 +98,7 @@ jobs:
         with:
           driver: docker
 
-      - name: Apply Kubernetes manifests
+      - name: Create namespace and secret
         run: |
           kubectl apply -f k8s/namespace.yaml
           kubectl create secret generic mediassist-secret \
@@ -106,28 +106,21 @@ jobs:
             --from-literal=POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
             --namespace=mediassist \
             --dry-run=client -o yaml | kubectl apply -f -
-          kubectl apply -f k8s/configmap.yaml
-          kubectl apply -f k8s/postgres-pvc.yaml
-          kubectl apply -f k8s/postgres-deployment.yaml
-          kubectl apply -f k8s/postgres-service.yaml
-          kubectl apply -f k8s/chroma-pvc.yaml
-          kubectl apply -f k8s/app-deployment.yaml
-          kubectl apply -f k8s/app-service.yaml
-          kubectl apply -f k8s/prometheus-config.yaml
-          kubectl apply -f k8s/prometheus-deployment.yaml
-          kubectl apply -f k8s/prometheus-service.yaml
-          kubectl apply -f k8s/grafana-deployment.yaml
-          kubectl apply -f k8s/grafana-service.yaml
-          kubectl apply -f k8s/mlflow-pvc.yaml
-          kubectl apply -f k8s/mlflow-deployment.yaml
-          kubectl apply -f k8s/mlflow-service.yaml
 
-      - name: Update app image to new SHA
+      - name: Validate manifests (dry-run)
         run: |
-          kubectl set image deployment/mediassist-app \
-            mediassist-app=${{ env.IMAGE_NAME }}:${{ needs.build-push.outputs.sha_tag }} \
-            -n mediassist
-
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/mediassist-app -n mediassist --timeout=300s
+          kubectl apply --dry-run=server -f k8s/configmap.yaml
+          kubectl apply --dry-run=server -f k8s/postgres-pvc.yaml
+          kubectl apply --dry-run=server -f k8s/postgres-deployment.yaml
+          kubectl apply --dry-run=server -f k8s/postgres-service.yaml
+          kubectl apply --dry-run=server -f k8s/chroma-pvc.yaml
+          kubectl apply --dry-run=server -f k8s/app-deployment.yaml
+          kubectl apply --dry-run=server -f k8s/app-service.yaml
+          kubectl apply --dry-run=server -f k8s/prometheus-config.yaml
+          kubectl apply --dry-run=server -f k8s/prometheus-deployment.yaml
+          kubectl apply --dry-run=server -f k8s/prometheus-service.yaml
+          kubectl apply --dry-run=server -f k8s/grafana-deployment.yaml
+          kubectl apply --dry-run=server -f k8s/grafana-service.yaml
+          kubectl apply --dry-run=server -f k8s/mlflow-pvc.yaml
+          kubectl apply --dry-run=server -f k8s/mlflow-deployment.yaml
+          kubectl apply --dry-run=server -f k8s/mlflow-service.yaml
